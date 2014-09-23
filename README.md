@@ -37,6 +37,7 @@ Note: Environment variables override configuration file options.
 
 TODO
 ----
+- [ ] Add support for 2fa
 - [ ] Add option to specify TTL
 - [ ] Better logging, show messages without needing `-t`
 
