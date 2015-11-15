@@ -24,7 +24,7 @@ Configuration File
 ------------------
 You can provide a JSON configuration mounted on /dnsimple.json. An exmaple can be found below
 
-```
+```json
 {
   "domain": "example.com",
   "host": "myhost",
@@ -35,9 +35,32 @@ You can provide a JSON configuration mounted on /dnsimple.json. An exmaple can b
 
 Note: Environment variables override configuration file options.
 
+#### IP Lookup URLS
+The following URLS are used for lookups:
+
+###### IPv4
+- http://ipinfo.io/ip
+- http://ipv4.icanhazip.com
+- http://ipecho.net/plain
+- http://ident.me/
+
+###### IPv6
+- http://v6.ident.me/
+- http://ip6.telize.com/
+- http://ipv6.icanhazip.com
+
+Lookups are performed in order and the script will use the first match. You can override these URLS by adding `lookup_urls` hash to the config file (environment variable not supported). Example:
+
+```json
+"lookup_urls": {
+                  "ipv4": [ "http://some.ipv4.url", "http://another.ipv4.url" ],
+                  "ipv6": [ "http://some.ipv6.url", "http://another.ipv6.url" ]
+               }
+```
+
 TODO
 ----
-- [ ] Add support for 2fa
 - [ ] Add option to specify TTL
 - [ ] Better logging, show messages without needing `-t`
+- [x] Support user specified Lookup URLS
 

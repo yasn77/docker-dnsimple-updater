@@ -8,28 +8,38 @@ import time
 import pprint
 
 config_file = '/dnsimple.json'
-env_vars_map = {
-                'DNSIMPLE_DOMAIN': 'domain',
+env_vars_map = {'DNSIMPLE_DOMAIN': 'domain',
                 'DNSIMPLE_HOST': 'host',
                 'DNSIMPLE_DOMAIN_TOKEN': 'api_token',
-                'UPDATE_INTERVAL': 'update'
-               }
+                'UPDATE_INTERVAL': 'update',
+                'NOOP': 'noop'}
+
 
 def get_config():
     config = {}
+    config['lookup_urls'] = {'ipv4': ['http://ipinfo.io/ip',
+                                      'http://ipv4.icanhazip.com',
+                                      'http://ipecho.net/plain',
+                                      'http://ident.me/'],
+                             'ipv6': ['http://v6.ident.me/',
+                                      'http://ip6.telize.com/',
+                                      'http://ipv6.icanhazip.com']}
+    config['noop'] = False
     try:
         with open(config_file) as d:
             config = json.load(d)
     except:
         pass
 
-    for k,v in env_vars_map.iteritems():
+    for k, v in env_vars_map.iteritems():
         if k in os.environ.keys():
             config[v] = os.environ[k]
     return config
 
+
 def __log(msg):
     print('{0} {1}').format(time.strftime("%Y-%m-%dT%H:%M:%S"), msg)
+
 
 def to_sec(u, v):
     if u == 's':
@@ -41,69 +51,64 @@ def to_sec(u, v):
     else:
         return int(v)
 
-def get_ext_ip():
-    ipv6 = None
-    ipv4 = None
-    try:
-        ipv4 = requests.get('http://jsonip.com').json()['ip']
-    except:
-        __log('WARN: Failed to get ipv4 from http://jsonip.com')
 
-    if ipv4 == None:
+def get_ext_ip(version):
+    ip = None
+
+    for url in config['lookup_urls'][version]:
         try:
-            ipv4 = requests.get('http://ipv4.icanhazip.com').text.strip()
+            ip = requests.get(url).text.strip()
         except:
-            __log('WARN: Failed to get ipv4 from http://ipv4.icanhazip.com')
+            __log('WARN: Failed to get ip from {0}'.format(url))
+        if ip is not None:
+            break
 
-    try:
-        ipv6 = requests.get('http://ipv6.icanhazip.com').text.strip()
-    except:
-        __log('WARN: Failed to get ipv6 from http://ipv6.icanhazip.com')
+    return ip
 
-    if ipv6 == None:
-        try:
-            ipv6 = requests.get('http://ip6.telize.com/').text.strip()
-        except:
-            __log('WARN: Failed to get ipv6 from http://ip6.telize.com/')
-    return (ipv4, ipv6)
 
 def create_record(name, record_type, content):
-    headers = {
-                'X-DNSimple-Domain-Token': config['api_token'],
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-             }
+    headers = {'X-DNSimple-Domain-Token': config['api_token'],
+               'Accept': 'application/json',
+               'Content-Type': 'application/json'}
+
     url = 'https://api.dnsimple.com/v1/domains/{0}/records'.format(config['domain'])
-    payload = { 'record': { 'name': name, 'content': content, 'record_type': record_type} }
+    payload = {'record': {'name': name, 'content': content, 'record_type': record_type}}
     try:
         __log('Creating "{0}" record for {1} using IP {2}'.format(record_type, name, content))
-        resp = requests.post(url, headers=headers, data=json.dumps(payload))
+        if not config['noop']:
+            resp = requests.post(url,
+                                 headers=headers,
+                                 data=json.dumps(payload))
     except e:
         __log('ERR: Problem creating "{0}" record for {1} using IP {2}'.format(record_type, name, content))
 
+
 def update_record(record, content):
-    headers = {
-                'X-DNSimple-Domain-Token': config['api_token'],
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-             }
-    url = 'https://api.dnsimple.com/v1/domains/{0}/records/{1}'.format(config['domain'],record['id'])
+    headers = {'X-DNSimple-Domain-Token': config['api_token'],
+               'Accept': 'application/json',
+               'Content-Type': 'application/json'}
+
+    url = 'https://api.dnsimple.com/v1/domains/{0}/records/{1}'.format(config['domain'], record['id'])
     if record['content'] == content:
         __log('"{0}" record content is already set to {1} for {2}... Skipping update'.format(record['record_type'], content, record['name']))
         return
     else:
-        payload = { 'record': { 'name': record['name'], 'content': content, } }
+        payload = {'record': {'name': record['name'], 'content': content}}
         try:
             __log('Updating record {0} for {1} using IP {2}'.format(record['id'], record['name'], content))
-            requests.request('PUT', url, headers=headers, data=json.dumps(payload))
+            if not config['noop']:
+                requests.request('PUT',
+                                 url,
+                                 headers=headers,
+                                 data=json.dumps(payload))
         except:
             __log('Problem updating record {0} for {1} using IP {2}'.format(record['id'], record['name'], content))
 
+
 def main():
-    headers = {
-                'X-DNSimple-Domain-Token': config['api_token'],
-                'Accept': 'application/json'
-             }
+    headers = {'X-DNSimple-Domain-Token': config['api_token'],
+               'Accept': 'application/json'}
+
     unit = config['update'][-1].lower()
     if unit.isalpha():
         interval = config['update'][0:-1]
@@ -112,8 +117,8 @@ def main():
 
     __log('DNSimple updater starting...')
     __log('CONFIG:')
-    for k,v in config.iteritems():
-        __log('{0}{1}: {2}'.format('\t',k,v))
+    for k, v in config.iteritems():
+        __log('{0}{1}: {2}'.format('\t', k, v))
 
     try:
         sec = to_sec(unit, interval)
@@ -122,20 +127,21 @@ def main():
         __log('ERR: Problem trying to convert {0} to seconds...exiting'.format(interval))
         exit(1)
 
-
     while True:
-        config['ipv4'], config['ipv6'] = get_ext_ip()
+        config['ipv4'] = get_ext_ip('ipv4')
+        config['ipv6'] = get_ext_ip('ipv6')
         ipv4_record = None
         ipv6_record = None
-        if config['ipv4'] == None and config['ipv6'] == None:
+        if config['ipv4'] is None and config['ipv6'] is None:
             have_ip = False
         else:
             have_ip = True
         try:
             domain_records = requests.get('https://api.dnsimple.com/v1/domains/{0}/records'.format(config['domain']), headers=headers).json()
+            domain_records[0]
         except:
             domain_records = None
-        if not domain_records == None and have_ip:
+        if not domain_records is None and have_ip:
             __log('About to update:')
             __log('{0}FQDN: {1}.{2} IPV4: {3} IPV6: {4}'.format(
                 '\t',
@@ -155,14 +161,14 @@ def main():
                 time.sleep(sec)
                 continue
             else:
-                if not config['ipv4'] == None:
-                    if ipv4_record == None:
+                if not config['ipv4'] is None:
+                    if ipv4_record is None:
                         pprint.pprint(ipv4_record)
                         create_record(config['host'], 'A', config['ipv4'])
                     else:
                         update_record(ipv4_record, config['ipv4'])
-                if not config['ipv6'] == None:
-                    if ipv6_record == None:
+                if not config['ipv6'] is None:
+                    if ipv6_record is None:
                         create_record(config['host'], 'AAAA', config['ipv6'])
                     else:
                         update_record(ipv6_record, config['ipv6'])
